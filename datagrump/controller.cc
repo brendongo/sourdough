@@ -5,16 +5,21 @@
 
 using namespace std;
 
+#define ALPHA 1
+#define BETA 0.5
+
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( debug )
+  : debug_( debug ), last_acked_sequence_number_(0), window_size_(1),
+    window_acks_(0)
 {}
 
 /* Get current window size, in datagrams */
 unsigned int Controller::window_size()
 {
   /* Default: fixed window size of 100 outstanding datagrams */
-  unsigned int the_window_size = 50;
+  // unsigned int the_window_size = 50;
+  unsigned int the_window_size = window_size_;
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ms()
@@ -32,7 +37,9 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
 				    const bool after_timeout
 				    /* datagram was sent because of a timeout */ )
 {
-  /* Default: take no action */
+  if (after_timeout) {
+    window_size_ /= 2;
+  }
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
@@ -50,7 +57,12 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 			       const uint64_t timestamp_ack_received )
                                /* when the ack was received (by sender) */
 {
-  /* Default: take no action */
+  window_acks_ += sequence_number_acked - last_acked_sequence_number_;
+  last_acked_sequence_number_ = sequence_number_acked;
+  if (window_acks_ >= window_size_) {
+    window_size_++;
+    window_acks_ = 0;
+  }
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received

@@ -11,6 +11,9 @@ private:
   bool debug_; /* Enables debugging output */
 
   /* Add member variables here */
+  uint64_t last_acked_sequence_number_;
+  unsigned int window_size_;
+  unsigned int window_acks_;
 
 public:
   /* Public interface for the congestion controller */
