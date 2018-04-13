@@ -5,8 +5,8 @@
 
 using namespace std;
 
-#define ALPHA 1
-#define BETA 0.5
+#define BETA 0.75
+#define MAX_DELAY 200
 
 /* Default constructor */
 Controller::Controller( const bool debug )
@@ -60,9 +60,13 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
     window_acks_ = 0;
   }
 
-  if ((timestamp_ack_received - send_timestamp_acked) >= 200) {
+  if ((timestamp_ack_received - send_timestamp_acked) <= MAX_DELAY / 4) {
+    window_acks_ += 10;
+  }
+
+  if ((timestamp_ack_received - send_timestamp_acked) >= MAX_DELAY) {
     window_acks_ = 0;
-    window_size_ /= 2;
+    window_size_ *= BETA;
     if (window_size_ == 0) {
       window_size_ = 1;
     }
