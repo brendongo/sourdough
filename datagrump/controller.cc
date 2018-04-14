@@ -3,26 +3,28 @@
 #include "controller.hh"
 #include "timestamp.hh"
 
+#include <unistd.h>
+
 using namespace std;
 
 #define BETA 0.75
-#define MAX_DELAY 200
+#define MAX_DELAY 100
 // One tick in Sprout algo
 #define TICK_SIZE_MS 20
 // Maximum time for ack to return to sender
-#define RECV_DELAY_MS 200
+#define RECV_DELAY_MS 150
 
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( true || debug ), last_acked_sequence_number_(0),
-  window_size_(1), window_acks_(0),
+  window_size_(50), window_acks_(0),
   last_update_ms_(timestamp_ms() + RECV_DELAY_MS),
   packets_recv_(), queue_size_estimate_(0), lambda_distr_(),
-  lambda_support_()
+  lambda_support_(), gaussian_(200)
 {
-  int blah = 50;
+  int blah = 200;
   for (int i = 0; i < blah; i++) {
-    double support = i * 1000. / blah;
+    double support = i * 800. / blah;
     lambda_support_.push_back(support);
     lambda_distr_[support] = 1. / blah;
   }
@@ -32,6 +34,7 @@ Controller::Controller( const bool debug )
 unsigned int Controller::window_size()
 {
   uint64_t current_time = timestamp_ms();
+  //cout << "CALLED: " << timestamp_ms() << endl;
   while (current_time >= last_update_ms_ + TICK_SIZE_MS) {
     vector<uint64_t> remaining;
     int packets_in_update_window = 0;
@@ -44,17 +47,42 @@ unsigned int Controller::window_size()
       }
     }
 
+    //for (auto &supports: lambda_distr_) {
+    //  cout << supports.first << ": " << supports.second << endl;
+    //}
+
+    //cout << "BROWNIAN" << endl;
+
     lambda_distr_ = brownian(lambda_distr_);
+
+    //for (auto &supports: lambda_distr_) {
+    //  cout << supports.first << ": " << supports.second << endl;
+    //}
+
+    //cout << "UPDATE WITH POISSON: " << packets_in_update_window << endl;
+
     update_distr(packets_in_update_window);
+
+    //for (auto &supports: lambda_distr_) {
+    //  cout << supports.first << ": " << supports.second << endl;
+    //}
+
     packets_recv_ = remaining;
     last_update_ms_ += TICK_SIZE_MS;
 
-    window_size_ = forecast();
-    cout << window_size_ << endl;
+    if (last_update_ms_ > current_time - TICK_SIZE_MS) {
+      cout << "BEFORE: " << timestamp_ms() << endl;
+      int f = forecast();
+      cout << "Current q: " << queue_size_estimate_ << endl;;
+      cout << "Forecast: " << f << endl;;
+      cout << "Window size: " << window_size_ << endl;;
+      window_size_ = max(int(1.4 * f - queue_size_estimate_ + window_size_), 5);
+      cout << "AFTER: " << timestamp_ms() << endl;
+    }
   }
 
   /* Default: fixed window size of 100 outstanding datagrams */
-  // unsigned int the_window_size = 50;
+  //unsigned int the_window_size = 50;
   unsigned int the_window_size = window_size_;
 
   if ( debug_ ) {
@@ -130,16 +158,17 @@ unsigned int Controller::timeout_ms()
 void Controller::update_distr(int recv_packets) {
   double mean = 0;
   for (auto &supports: lambda_distr_) {
-    cout << supports.first << ": " << supports.second << endl;
+    //cout << supports.first << ": " << supports.second << endl;
     mean += supports.first * supports.second;
   }
   cout << "Mean: " << mean << endl;
+  cout << "Observed: " << recv_packets * 1000. / TICK_SIZE_MS << endl;
   cout << endl << endl;
 
   double normalization_factor = 0.;
   for (auto &supports: lambda_distr_) {
-    Poisson p(supports.first * TICK_SIZE_MS / 1000.);
-    supports.second *= (p.pdf(recv_packets) + 0.00001);
+    Poisson p((supports.first + 2.5)  * TICK_SIZE_MS / 1000.);
+    supports.second *= (p.pdf(recv_packets) + 0.00000);
     normalization_factor += supports.second;
   }
 
@@ -151,13 +180,11 @@ void Controller::update_distr(int recv_packets) {
 unordered_map<double, double> Controller::brownian(
     const unordered_map<double, double> &lambda_distr
     ) {
+  // Use the same supports but clear probs
   unordered_map<double, double> updated(lambda_distr);
-  for (auto const &supports: lambda_distr) {
-    double weight = supports.second;
-    NormalDistribution normal(supports.first, 200);
-    for (auto &supports2: updated) {
-      supports2.second += weight * normal.pdf(supports2.second);
-    }
+
+  for (auto &supports: updated) {
+    supports.second = supports.second * 0.9 + 0.005 * .1;
   }
 
   double normalization_factor = 0.;
@@ -169,6 +196,27 @@ unordered_map<double, double> Controller::brownian(
     supports.second /= normalization_factor;
   }
   return updated;
+
+  //for (auto &updated_support: updated) {
+  //  updated_support.second = 0;
+  //}
+
+  //for (auto const &supports: lambda_distr) {
+  //  double weight = supports.second;
+  //  for (auto &supports2: updated) {
+  //    supports2.second += weight * gaussian_.pdf(supports2.first - supports.first);
+  //  }
+  //}
+
+  //double normalization_factor = 0.;
+  //for (auto &supports: updated) {
+  //  normalization_factor += supports.second;
+  //}
+
+  //for (auto &supports: updated) {
+  //  supports.second /= normalization_factor;
+  //}
+  //return updated;
 }
 
 int Controller::forecast() {
@@ -185,7 +233,7 @@ int Controller::forecast() {
   double cdf = 0;
   for (double lambda: lambda_support_) {
     cdf += cum_lambda_d[lambda];
-    if (cdf > 0.05) {
+    if (cdf > 0.2) {
       return lambda * MAX_DELAY / 1000.;
     }
   }

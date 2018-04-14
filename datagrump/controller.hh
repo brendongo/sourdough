@@ -5,8 +5,36 @@
 #include <vector>
 #include <cmath>
 #include <unordered_map>
+#include <map>
 
 /* Congestion controller interface */
+class NormalDistribution {
+  private:
+    double std_;
+    //std::map<double, double> probs_;
+    //std::vector<double> probs_;
+    double probs_[200];
+
+  public:
+    NormalDistribution(double std) : std_(std), probs_() {
+      int blah = 200;
+      for (int i = 0; i < blah; i++) {
+        double support = i * 800. / blah;
+        probs_[i] = 
+            1. / sqrt(2 * M_PI * std_ * std_) * exp(-pow(support, 2) / (2 * std_ * std_));
+        //std::cout << "Normal(" << support << ") = " << probs_[i] << std::endl;
+        //probs_.push_back(support);
+        //probs_[support] = 0;
+            //1. / sqrt(2 * M_PI * std_ * std_) * exp(-pow(support, 2) / (2 * std_ * std_));
+      }
+    }
+
+    double pdf(double x) {
+      return probs_[int(std::abs(x) * 200 / 1000.)];
+      //return probs_[int(x * 200. / 1000.)];
+      //return probs_.at(std::abs(x));
+    }
+};
 
 class Controller
 {
@@ -15,7 +43,7 @@ private:
 
   /* Add member variables here */
   uint64_t last_acked_sequence_number_;
-  unsigned int window_size_;
+  int window_size_;
   unsigned int window_acks_;
 
   // Timestamp when we last updated lambda distr
@@ -25,10 +53,12 @@ private:
   std::vector<uint64_t> packets_recv_;
 
   // Upper bound of packets currently in the router buffer
-  uint64_t queue_size_estimate_;
+  int queue_size_estimate_;
 
   std::unordered_map<double, double> lambda_distr_;
   std::vector<double> lambda_support_;
+
+  NormalDistribution gaussian_;
 
 public:
   /* Public interface for the congestion controller */
@@ -90,18 +120,4 @@ class NegativeExponential {
       return lambda_ * exp(-1 * lambda_ * x);
     }
 };
-
-class NormalDistribution {
-  private:
-    double mean_;
-    double std_;
-
-  public:
-    NormalDistribution(double mean, double std) : mean_(mean), std_(std) {}
-
-    double pdf(double x) {
-      return 1. / (sqrt(2 * M_PI * std_ * std_) * exp(-pow(x - mean_, 2) / (2 * std_ * std_)));
-    }
-};
-
 #endif
