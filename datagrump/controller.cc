@@ -16,7 +16,7 @@ using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( true || debug ), last_acked_sequence_number_(0),
+  : debug_( false || debug ), last_acked_sequence_number_(0),
   window_size_(50), window_acks_(0),
   last_update_ms_(timestamp_ms() + RECV_DELAY_MS),
   packets_recv_(), queue_size_estimate_(0), lambda_distr_(),
@@ -71,13 +71,8 @@ unsigned int Controller::window_size()
     last_update_ms_ += TICK_SIZE_MS;
 
     if (last_update_ms_ > current_time - TICK_SIZE_MS) {
-      cout << "BEFORE: " << timestamp_ms() << endl;
       int f = forecast();
-      cout << "Current q: " << queue_size_estimate_ << endl;;
-      cout << "Forecast: " << f << endl;;
-      cout << "Window size: " << window_size_ << endl;;
-      window_size_ = max(int(1.4 * f - queue_size_estimate_ + window_size_), 5);
-      cout << "AFTER: " << timestamp_ms() << endl;
+      window_size_ = max(int(1.2 * f - queue_size_estimate_ + window_size_), 5);
     }
   }
 
@@ -152,23 +147,23 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
    before sending one more datagram */
 unsigned int Controller::timeout_ms()
 {
-  return 1000; /* timeout of one second */
+  return 150; /* timeout of one second */
 }
 
 void Controller::update_distr(int recv_packets) {
-  double mean = 0;
-  for (auto &supports: lambda_distr_) {
-    //cout << supports.first << ": " << supports.second << endl;
-    mean += supports.first * supports.second;
-  }
-  cout << "Mean: " << mean << endl;
-  cout << "Observed: " << recv_packets * 1000. / TICK_SIZE_MS << endl;
-  cout << endl << endl;
+  //double mean = 0;
+  //for (auto &supports: lambda_distr_) {
+  //  //cout << supports.first << ": " << supports.second << endl;
+  //  mean += supports.first * supports.second;
+  //}
+  //cout << "Mean: " << mean << endl;
+  //cout << "Observed: " << recv_packets * 1000. / TICK_SIZE_MS << endl;
+  //cout << endl << endl;
 
   double normalization_factor = 0.;
   for (auto &supports: lambda_distr_) {
     Poisson p((supports.first + 2.5)  * TICK_SIZE_MS / 1000.);
-    supports.second *= (p.pdf(recv_packets) + 0.00000);
+    supports.second *= p.pdf(recv_packets);
     normalization_factor += supports.second;
   }
 
