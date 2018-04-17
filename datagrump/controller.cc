@@ -22,11 +22,11 @@ Controller::Controller( const bool debug )
   packets_recv_(), queue_size_estimate_(0), lambda_distr_(),
   lambda_support_(), gaussian_(200)
 {
-  int blah = 200;
-  for (int i = 0; i < blah; i++) {
-    double support = i * 800. / blah;
+  int num_buckets = 200;
+  for (int i = 0; i < num_buckets; i++) {
+    double support = i * 800. / num_buckets;
     lambda_support_.push_back(support);
-    lambda_distr_[support] = 1. / blah;
+    lambda_distr_[support] = 1. / num_buckets;
   }
 }
 
@@ -34,7 +34,6 @@ Controller::Controller( const bool debug )
 unsigned int Controller::window_size()
 {
   uint64_t current_time = timestamp_ms();
-  //cout << "CALLED: " << timestamp_ms() << endl;
   while (current_time >= last_update_ms_ + TICK_SIZE_MS) {
     vector<uint64_t> remaining;
     int packets_in_update_window = 0;
@@ -47,25 +46,9 @@ unsigned int Controller::window_size()
       }
     }
 
-    //for (auto &supports: lambda_distr_) {
-    //  cout << supports.first << ": " << supports.second << endl;
-    //}
-
-    //cout << "BROWNIAN" << endl;
-
     lambda_distr_ = brownian(lambda_distr_);
 
-    //for (auto &supports: lambda_distr_) {
-    //  cout << supports.first << ": " << supports.second << endl;
-    //}
-
-    //cout << "UPDATE WITH POISSON: " << packets_in_update_window << endl;
-
     update_distr(packets_in_update_window);
-
-    //for (auto &supports: lambda_distr_) {
-    //  cout << supports.first << ": " << supports.second << endl;
-    //}
 
     packets_recv_ = remaining;
     last_update_ms_ += TICK_SIZE_MS;
@@ -76,8 +59,6 @@ unsigned int Controller::window_size()
     }
   }
 
-  /* Default: fixed window size of 100 outstanding datagrams */
-  //unsigned int the_window_size = 50;
   unsigned int the_window_size = window_size_;
 
   if ( debug_ ) {
@@ -117,22 +98,6 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   queue_size_estimate_--;
   window_acks_ += sequence_number_acked - last_acked_sequence_number_;
   last_acked_sequence_number_ = sequence_number_acked;
-  //if (window_acks_ >= window_size_) {
-  //  window_size_++;
-  //  window_acks_ = 0;
-  //}
-
-  //if ((timestamp_ack_received - send_timestamp_acked) <= MAX_DELAY / 4) {
-  //  window_acks_ += 10;
-  //}
-
-  //if ((timestamp_ack_received - send_timestamp_acked) >= MAX_DELAY) {
-  //  window_acks_ = 0;
-  //  window_size_ *= BETA;
-  //  if (window_size_ == 0) {
-  //    window_size_ = 1;
-  //  }
-  //}
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
@@ -151,15 +116,6 @@ unsigned int Controller::timeout_ms()
 }
 
 void Controller::update_distr(int recv_packets) {
-  //double mean = 0;
-  //for (auto &supports: lambda_distr_) {
-  //  //cout << supports.first << ": " << supports.second << endl;
-  //  mean += supports.first * supports.second;
-  //}
-  //cout << "Mean: " << mean << endl;
-  //cout << "Observed: " << recv_packets * 1000. / TICK_SIZE_MS << endl;
-  //cout << endl << endl;
-
   double normalization_factor = 0.;
   for (auto &supports: lambda_distr_) {
     Poisson p((supports.first + 2.5)  * TICK_SIZE_MS / 1000.);
@@ -191,27 +147,6 @@ unordered_map<double, double> Controller::brownian(
     supports.second /= normalization_factor;
   }
   return updated;
-
-  //for (auto &updated_support: updated) {
-  //  updated_support.second = 0;
-  //}
-
-  //for (auto const &supports: lambda_distr) {
-  //  double weight = supports.second;
-  //  for (auto &supports2: updated) {
-  //    supports2.second += weight * gaussian_.pdf(supports2.first - supports.first);
-  //  }
-  //}
-
-  //double normalization_factor = 0.;
-  //for (auto &supports: updated) {
-  //  normalization_factor += supports.second;
-  //}
-
-  //for (auto &supports: updated) {
-  //  supports.second /= normalization_factor;
-  //}
-  //return updated;
 }
 
 int Controller::forecast() {
@@ -233,7 +168,5 @@ int Controller::forecast() {
     }
   }
 
-  int x = *(int *)0;
-  x++;
   return 0;
 }
